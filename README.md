@@ -103,4 +103,5 @@ npx wrangler deploy
 The service-role key stays in the Worker and is never exposed to the frontend or committed firmware. See `docs/architecture.md` for the request contract and deployment model.
 
 
+
 https://supabase.com/dashboard/project/rllvqfikbcavrtcqypgz
