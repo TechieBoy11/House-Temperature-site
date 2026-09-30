@@ -1,3 +1,4 @@
 arduino/src/**/secrets.h
 api/.dev.vars
 frontend/.env.local
+.links

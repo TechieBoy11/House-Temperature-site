@@ -103,5 +103,5 @@ void loop() {
   Serial.print("API response: ");
   Serial.println(responseStatus);
   client.stop();
-  delay(5000);
+  delay(60000);
 }

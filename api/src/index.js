@@ -18,7 +18,10 @@ export default {
     try {
       const url = new URL(request.url);
       if (request.method === 'OPTIONS') return new Response(null, { headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'content-type,x-sensor-token' } });
-      if (url.pathname === '/health') return json({ status: 'ok', service: 'room-temperature-api' });
+      if (url.pathname === '/health') {
+        const configured = Boolean(env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.SENSOR_INGEST_TOKEN);
+        return json({ status: configured ? 'ok' : 'misconfigured', service: 'room-temperature-api', supabase_url_configured: Boolean(env.SUPABASE_URL), supabase_key_configured: Boolean(env.SUPABASE_SERVICE_ROLE_KEY), ingest_token_configured: Boolean(env.SENSOR_INGEST_TOKEN) }, configured ? 200 : 503);
+      }
 
     if (url.pathname === '/readings' && request.method === 'GET') {
       const limit = Math.min(Number(url.searchParams.get('limit') || 100), 500);

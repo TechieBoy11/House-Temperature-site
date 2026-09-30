@@ -10,24 +10,34 @@ function Icon({ children }) {
   return <span className="icon" aria-hidden="true">{children}</span>;
 }
 
-function MetricChart({ actual, high, low, formatValue, color, ariaLabel }) {
+function MetricChart({ actual, timestamps, high, low, average, formatValue, color, ariaLabel, range }) {
   if (!actual.length) return <div className="empty-chart">Waiting for the first sensor reading.</div>;
   const width = 800;
   const height = 260;
-  const values = [...actual, ...high, ...low].map(formatValue);
+  const values = [...actual, ...high, ...low, average].filter((value) => value != null).map(formatValue);
   const minimum = Math.min(...values);
   const maximum = Math.max(...values);
   const padding = Math.max((maximum - minimum) * 0.18, 1);
   const min = minimum - padding;
   const max = maximum + padding;
-  const denominator = Math.max(actual.length - 1, 1);
+  const numericTimes = timestamps.map((timestamp) => new Date(timestamp).getTime());
+  const startTime = numericTimes[0];
+  const endTime = numericTimes.at(-1);
+  const timeSpan = Math.max(endTime - startTime, 1);
   const pointsFor = (series) => series.map((value, index) => {
-    const x = (index / denominator) * width;
+    const x = ((numericTimes[index] - startTime) / timeSpan) * width;
     const y = height - ((formatValue(value) - min) / (max - min)) * height;
     return `${x},${y}`;
   }).join(' ');
   const actualPoints = pointsFor(actual);
-  const lastActual = actual.at(-1);
+  const pointFor = (value, index) => {
+    const x = ((numericTimes[index] - startTime) / timeSpan) * width;
+    const y = height - ((formatValue(value) - min) / (max - min)) * height;
+    return { x, y };
+  };
+  const axisTimes = [0, 0.25, 0.5, 0.75, 1].map((fraction) => new Date(startTime + timeSpan * fraction));
+  const axisLabel = (date) => range === '24 hours' ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const lastActual = pointFor(actual.at(-1), actual.length - 1);
 
   return (
     <div className="chart-wrap">
@@ -37,12 +47,18 @@ function MetricChart({ actual, high, low, formatValue, color, ariaLabel }) {
       <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel}>
         {[0, 1, 2, 3, 4].map((line) => <line key={line} x1="0" x2={width} y1={line * (height / 4)} y2={line * (height / 4)} className="grid-line" />)}
         <polyline points={`${actualPoints} ${width},${height} 0,${height}`} className="area-fill" />
-        {high.length > 0 && <polyline points={pointsFor(high)} className="chart-high" />}
-        {low.length > 0 && <polyline points={pointsFor(low)} className="chart-low" />}
+        <polyline points={pointsFor(high)} className="chart-high" />
+        <polyline points={pointsFor(low)} className="chart-low" />
+        <line x1="0" x2={width} y1={height - ((formatValue(average) - min) / (max - min)) * height} y2={height - ((formatValue(average) - min) / (max - min)) * height} className="chart-average" />
         <polyline points={actualPoints} className="chart-line" style={{ stroke: color }} />
-        <circle cx={width} cy={height - ((formatValue(lastActual) - min) / (max - min)) * height} r="6" className="chart-dot" style={{ fill: color }} />
+        {actual.map((value, index) => {
+          const point = pointFor(value, index);
+          return index % Math.max(1, Math.floor(actual.length / 100)) === 0 ? <circle key={index} cx={point.x} cy={point.y} r="2.5" className={formatValue(value) >= formatValue(average) ? 'chart-dot-above' : 'chart-dot-below'} /> : null;
+        })}
+        <circle cx={lastActual.x} cy={lastActual.y} r="6" className="chart-dot" style={{ fill: color }} />
       </svg>
-      <div className="chart-times"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>Now</span></div>
+      <div className="chart-times">{axisTimes.map((time) => <span key={time.toISOString()}>{axisLabel(time)}</span>)}</div>
+      <div className="chart-legend"><span><i className="legend-actual" />Actual</span><span><i className="legend-high" />High</span><span><i className="legend-low" />Low</span><span><i className="legend-average" />Average</span></div>
     </div>
   );
 }
@@ -93,17 +109,20 @@ function App() {
   const currentTemp = activeRoom?.current_temperature_c;
   const roomReadings = useMemo(() => readings.filter((reading) => reading.room_id === activeRoom?.id).sort((a, b) => new Date(a.recorded_at) - new Date(b.recorded_at)), [activeRoom, readings]);
   const buildSeries = (field) => {
-    const actual = roomReadings.map((reading) => reading[field]);
-    if (range === '24 hours') return { actual, high: [], low: [] };
+    const points = roomReadings.filter((reading) => Number.isFinite(reading[field]));
+    const actual = points.map((reading) => reading[field]);
+    const timestamps = points.map((reading) => reading.recorded_at);
+    if (!actual.length) return { actual, timestamps, high: [], low: [], average: null };
+    const average = actual.reduce((sum, value) => sum + value, 0) / actual.length;
     const daily = new Map();
-    roomReadings.forEach((reading) => {
+    points.forEach((reading) => {
       const day = reading.recorded_at.slice(0, 10);
       const value = reading[field];
       const values = daily.get(day) || [];
       values.push(value);
       daily.set(day, values);
     });
-    return { actual, high: roomReadings.map((reading) => Math.max(...daily.get(reading.recorded_at.slice(0, 10)))), low: roomReadings.map((reading) => Math.min(...daily.get(reading.recorded_at.slice(0, 10)))) };
+    return { actual, timestamps, high: points.map((reading) => range === '24 hours' ? Math.max(...actual) : Math.max(...daily.get(reading.recorded_at.slice(0, 10)))), low: points.map((reading) => range === '24 hours' ? Math.min(...actual) : Math.min(...daily.get(reading.recorded_at.slice(0, 10)))), average };
   };
   const temperatureSeries = buildSeries('temperature_c');
   const humiditySeries = buildSeries('humidity_percent');
@@ -142,8 +161,8 @@ function App() {
             <article className="stat-card"><div className="stat-top"><span className="eyebrow">HUMIDITY</span><Icon>◌</Icon></div><strong>{activeRoom.current_humidity_percent == null ? '--' : activeRoom.current_humidity_percent}<span>{activeRoom.current_humidity_percent == null ? '' : '%'}</span></strong><div className="meter"><span style={{ width: `${activeRoom.current_humidity_percent ?? 0}%` }} /></div><p>Relative humidity</p></article>
           </section>
 
-          <section className="history-section"><div className="section-heading history-heading"><div><span className="eyebrow">TEMPERATURE HISTORY</span><h2>{selectedRoom} over time.</h2></div><div className="range-picker">{['24 hours', '7 days', '30 days'].map((option) => <button key={option} className={range === option ? 'active' : ''} onClick={() => setRange(option)}>{option}</button>)}</div></div><div className="chart-card"><div className="chart-summary"><div><strong>{formatTemperature(currentTemp)}</strong><span className="positive">↗ 2.1%</span><p>Current temperature</p></div><div className="high-low"><span><i className="high-dot" />High <b>{formatTemperature(activeRoom.daily_high_c)}</b></span><span><i className="low-dot" />Low <b>{formatTemperature(activeRoom.daily_low_c)}</b></span></div></div><MetricChart actual={temperatureSeries.actual.length ? temperatureSeries.actual : [currentTemp]} high={temperatureSeries.high} low={temperatureSeries.low} formatValue={toFahrenheit} color="#c96752" ariaLabel={`${selectedRoom} temperature history`} /></div><div className="room-selector"><label htmlFor="room-select">ROOM</label><select id="room-select" value={selectedRoom} onChange={(event) => setSelectedRoom(event.target.value)}>{visibleRooms.map((room) => <option key={room.name} value={room.name}>{room.name}</option>)}</select><span>More rooms can be added here later.</span></div></section>
-          <section className="history-section humidity-history"><div className="section-heading history-heading"><div><span className="eyebrow">HUMIDITY HISTORY</span><h2>{selectedRoom} humidity.</h2></div></div><div className="chart-card"><div className="chart-summary"><div><strong>{activeRoom.current_humidity_percent == null ? '--' : `${activeRoom.current_humidity_percent}%`}</strong><p>Current relative humidity</p></div><div className="high-low"><span><i className="high-dot" />High <b>{humiditySeries.actual.length ? `${Math.max(...humiditySeries.actual).toFixed(0)}%` : '--'}</b></span><span><i className="low-dot" />Low <b>{humiditySeries.actual.length ? `${Math.min(...humiditySeries.actual).toFixed(0)}%` : '--'}</b></span></div></div><MetricChart actual={humiditySeries.actual} high={humiditySeries.high} low={humiditySeries.low} formatValue={(value) => value} color="#5684a5" ariaLabel={`${selectedRoom} humidity history`} /></div></section>
+          <section className="history-section"><div className="section-heading history-heading"><div><span className="eyebrow">TEMPERATURE HISTORY</span><h2>{selectedRoom} over time.</h2></div><div className="range-picker">{['24 hours', '7 days', '30 days'].map((option) => <button key={option} className={range === option ? 'active' : ''} onClick={() => setRange(option)}>{option}</button>)}</div></div><div className="chart-card"><div className="chart-summary"><div><strong>{formatTemperature(currentTemp)}</strong><span className="positive">↗ 2.1%</span><p>Current temperature</p></div><div className="high-low"><span><i className="high-dot" />High <b>{formatTemperature(activeRoom.daily_high_c)}</b></span><span><i className="low-dot" />Low <b>{formatTemperature(activeRoom.daily_low_c)}</b></span></div></div><MetricChart actual={temperatureSeries.actual} timestamps={temperatureSeries.timestamps} high={temperatureSeries.high} low={temperatureSeries.low} average={temperatureSeries.average} formatValue={toFahrenheit} color="#c96752" range={range} ariaLabel={`${selectedRoom} temperature history`} /></div><div className="room-selector"><label htmlFor="room-select">ROOM</label><select id="room-select" value={selectedRoom} onChange={(event) => setSelectedRoom(event.target.value)}>{visibleRooms.map((room) => <option key={room.name} value={room.name}>{room.name}</option>)}</select><span>More rooms can be added here later.</span></div></section>
+          <section className="history-section humidity-history"><div className="section-heading history-heading"><div><span className="eyebrow">HUMIDITY HISTORY</span><h2>{selectedRoom} humidity.</h2></div></div><div className="chart-card"><div className="chart-summary"><div><strong>{activeRoom.current_humidity_percent == null ? '--' : `${activeRoom.current_humidity_percent}%`}</strong><p>Current relative humidity</p></div><div className="high-low"><span><i className="high-dot" />High <b>{humiditySeries.actual.length ? `${Math.max(...humiditySeries.actual).toFixed(0)}%` : '--'}</b></span><span><i className="low-dot" />Low <b>{humiditySeries.actual.length ? `${Math.min(...humiditySeries.actual).toFixed(0)}%` : '--'}</b></span></div></div><MetricChart actual={humiditySeries.actual} timestamps={humiditySeries.timestamps} high={humiditySeries.high} low={humiditySeries.low} average={humiditySeries.average} formatValue={(value) => value} color="#5684a5" range={range} ariaLabel={`${selectedRoom} humidity history`} /></div></section>
           <footer>Hearthline home climate <span>•</span> Data refreshes automatically every 5 minutes</footer>
         </div>
       </main>
