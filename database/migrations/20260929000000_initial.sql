@@ -49,23 +49,13 @@ with latest_readings as (
   from temperature_readings
   group by sensor_id
 )
-select
-  rooms.id,
-  rooms.name,
-  sensors.id as sensor_id,
-  sensors.name as sensor_name,
-  sensors.is_active,
-  latest_readings.current_temperature_c,
-  latest_readings.current_humidity_percent,
-  latest_readings.last_reading_at,
-  daily_stats.daily_high_c,
-  daily_stats.daily_low_c,
-  daily_stats.daily_average_c
+select rooms.id, rooms.name, sensors.id as sensor_id, sensors.name as sensor_name,
+  sensors.is_active, latest_readings.current_temperature_c,
+  latest_readings.current_humidity_percent, latest_readings.last_reading_at,
+  daily_stats.daily_high_c, daily_stats.daily_low_c, daily_stats.daily_average_c
 from rooms
 left join sensors on sensors.room_id = rooms.id
 left join latest_readings on latest_readings.sensor_id = sensors.id
 left join daily_stats on daily_stats.sensor_id = sensors.id;
 
 grant select on room_dashboard to service_role;
-
--- The API uses the Supabase service role; no client-facing table policies are needed.

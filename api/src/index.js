@@ -21,20 +21,24 @@ export default {
 
     if (url.pathname === '/readings' && request.method === 'GET') {
       const limit = Math.min(Number(url.searchParams.get('limit') || 100), 500);
-      const response = await supabase(env, `temperature_readings?select=*&order=recorded_at.desc&limit=${limit}`);
-      return new Response(response.body, { status: response.status, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
+      const response = await supabase(env, `temperature_readings?select=*,sensors(room_id)&order=recorded_at.desc&limit=${limit}`);
+      if (!response.ok) return new Response(response.body, { status: response.status, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
+      const readings = await response.json();
+      return json(readings.map((reading) => ({ ...reading, room_id: reading.sensors?.room_id })), response.status);
     }
 
     if (url.pathname === '/readings' && request.method === 'POST') {
       if (!env.SENSOR_INGEST_TOKEN || request.headers.get('x-sensor-token') !== env.SENSOR_INGEST_TOKEN) return json({ error: 'Unauthorized' }, 401);
       const payload = await request.json();
       if (!payload.sensor_id || typeof payload.temperature_c !== 'number' || (payload.humidity_percent !== undefined && typeof payload.humidity_percent !== 'number')) return json({ error: 'sensor_id and temperature_c are required; humidity_percent is optional' }, 400);
-      const response = await supabase(env, 'temperature_readings', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({ sensor_id: payload.sensor_id, temperature_c: payload.temperature_c, humidity_percent: payload.humidity_percent, recorded_at: payload.recorded_at || new Date().toISOString() }) });
+      const reading = { sensor_id: payload.sensor_id, temperature_c: payload.temperature_c, recorded_at: new Date().toISOString() };
+      if (payload.humidity_percent !== undefined) reading.humidity_percent = payload.humidity_percent;
+      const response = await supabase(env, 'temperature_readings', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(reading) });
       return new Response(response.body, { status: response.status, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
     }
 
     if (url.pathname === '/rooms' && request.method === 'GET') {
-      const response = await supabase(env, 'rooms?select=*,sensors(*)&order=name.asc');
+      const response = await supabase(env, 'room_dashboard?select=*&order=name.asc');
       return new Response(response.body, { status: response.status, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
     }
     return json({ error: 'Not found' }, 404);
