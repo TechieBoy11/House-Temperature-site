@@ -4,6 +4,7 @@ const port = Number(process.env.PORT || 8787);
 const rooms = [
   { id: 'living-room-sensor', name: 'Living room', note: 'North-facing', status: 'Waiting for sensor', color: '#df755b', icon: 'LR', current_temperature_c: null, current_humidity_percent: null, daily_high_c: null, daily_low_c: null, daily_average_c: null },
   { id: 'f6af7002-7100-4b13-b04b-1ca1245d746b', name: "Logan's bedroom", note: 'Quiet hours', status: 'Waiting for sensor', color: '#5684a5', icon: 'LB', current_temperature_c: null, current_humidity_percent: null, daily_high_c: null, daily_low_c: null, daily_average_c: null },
+  { id: 'fac96f01-5ae9-4c81-b867-193ca4c6372d', name: 'master_room', note: 'Radio node', status: 'Waiting for sensor', color: '#c89b4a', icon: 'MR', current_temperature_c: null, current_humidity_percent: null, daily_high_c: null, daily_low_c: null, daily_average_c: null },
   { id: 'kitchen-sensor', name: 'Kitchen', note: 'Sensor online', status: 'Waiting for sensor', color: '#c89b4a', icon: 'KT', current_temperature_c: null, current_humidity_percent: null, daily_high_c: null, daily_low_c: null, daily_average_c: null },
   { id: 'studio-sensor', name: 'Studio', note: 'Sunlit', status: 'Waiting for sensor', color: '#bc6258', icon: 'ST', current_temperature_c: null, current_humidity_percent: null, daily_high_c: null, daily_low_c: null, daily_average_c: null },
 ];
@@ -52,9 +53,10 @@ const server = createServer((request, response) => {
   }
   if (url.pathname === '/readings' && request.method === 'GET') {
     const range = url.searchParams.get('range') || '24h';
-    const limit = Math.min(Number(url.searchParams.get('limit') || 2000), 2000);
-    const interval = range === '24h' ? 60 * 1000 : 60 * 60 * 1000;
-    const windowStart = Date.now() - (range === '24h' ? 24 * 60 * interval : range === '7d' ? 7 * 24 * interval : 30 * 24 * interval);
+    const customDays = Math.min(Math.max(Number(url.searchParams.get('days') || 1), 1), 365);
+    const hours = range === '1h' ? 1 : range === '24h' ? 24 : range === '7d' ? 24 * 7 : range === '30d' ? 24 * 30 : customDays * 24;
+    const limit = Math.min(Number(url.searchParams.get('limit') || 5000), 5000);
+    const windowStart = Date.now() - hours * 60 * 60 * 1000;
     const matching = readings.filter((reading) => new Date(reading.recorded_at).getTime() >= windowStart);
     return send(response, 200, matching.slice(-limit).reverse());
   }

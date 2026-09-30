@@ -24,8 +24,13 @@ export default {
       }
 
     if (url.pathname === '/readings' && request.method === 'GET') {
-      const limit = Math.min(Number(url.searchParams.get('limit') || 100), 500);
-      const response = await supabase(env, `temperature_readings?select=*,sensors(room_id)&order=recorded_at.desc&limit=${limit}`);
+      const range = url.searchParams.get('range') || '24h';
+      const customDays = Math.min(Math.max(Number(url.searchParams.get('days') || 1), 1), 365);
+      const hours = range === '1h' ? 1 : range === '24h' ? 24 : range === '7d' ? 24 * 7 : range === '30d' ? 24 * 30 : customDays * 24;
+      const from = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+      const limit = Math.min(Number(url.searchParams.get('limit') || 5000), 5000);
+      const params = new URLSearchParams({ select: '*,sensors(room_id)', recorded_at: `gte.${from}`, order: 'recorded_at.asc', limit: String(limit) });
+      const response = await supabase(env, `temperature_readings?${params.toString()}`);
       if (!response.ok) return new Response(response.body, { status: response.status, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
       const readings = await response.json();
       return json(readings.map((reading) => ({ ...reading, room_id: reading.sensors?.room_id })), response.status);

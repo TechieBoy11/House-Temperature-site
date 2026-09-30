@@ -10,7 +10,8 @@ function Icon({ children }) {
   return <span className="icon" aria-hidden="true">{children}</span>;
 }
 
-function MetricChart({ actual, timestamps, high, low, average, formatValue, color, ariaLabel, range }) {
+function MetricChart({ actual, timestamps, high, low, average, formatValue, color, ariaLabel, range, unit }) {
+  const [hoverIndex, setHoverIndex] = useState(null);
   if (!actual.length) return <div className="empty-chart">Waiting for the first sensor reading.</div>;
   const width = 800;
   const height = 260;
@@ -38,13 +39,22 @@ function MetricChart({ actual, timestamps, high, low, average, formatValue, colo
   const axisTimes = [0, 0.25, 0.5, 0.75, 1].map((fraction) => new Date(startTime + timeSpan * fraction));
   const axisLabel = (date) => range === '24 hours' ? date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   const lastActual = pointFor(actual.at(-1), actual.length - 1);
+  const hoverPoint = hoverIndex == null ? null : pointFor(actual[hoverIndex], hoverIndex);
+  const hoverDate = hoverIndex == null ? null : new Date(timestamps[hoverIndex]);
+  const hoverLabel = hoverDate?.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const hoverValue = hoverIndex == null ? '' : formatValue(actual[hoverIndex]).toFixed(1);
 
   return (
     <div className="chart-wrap">
       <div className="chart-labels" aria-hidden="true">
         <span>{max.toFixed(0)}</span><span>{(max - (max - min) / 4).toFixed(0)}</span><span>{(max - (max - min) / 2).toFixed(0)}</span><span>{(max - (max - min) * 0.75).toFixed(0)}</span><span>{min.toFixed(0)}</span>
       </div>
-      <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel}>
+      <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel} onMouseMove={(event) => {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const x = ((event.clientX - bounds.left) / bounds.width) * width;
+        const nearest = numericTimes.reduce((best, time, index) => Math.abs(pointFor(actual[index], index).x - x) < Math.abs(pointFor(actual[best], best).x - x) ? index : best, 0);
+        setHoverIndex(nearest);
+      }} onMouseLeave={() => setHoverIndex(null)}>
         {[0, 1, 2, 3, 4].map((line) => <line key={line} x1="0" x2={width} y1={line * (height / 4)} y2={line * (height / 4)} className="grid-line" />)}
         <polyline points={`${actualPoints} ${width},${height} 0,${height}`} className="area-fill" />
         <polyline points={pointsFor(high)} className="chart-high" />
@@ -56,6 +66,7 @@ function MetricChart({ actual, timestamps, high, low, average, formatValue, colo
           return index % Math.max(1, Math.floor(actual.length / 100)) === 0 ? <circle key={index} cx={point.x} cy={point.y} r="2.5" className={formatValue(value) >= formatValue(average) ? 'chart-dot-above' : 'chart-dot-below'} /> : null;
         })}
         <circle cx={lastActual.x} cy={lastActual.y} r="6" className="chart-dot" style={{ fill: color }} />
+        {hoverPoint && <g className="chart-tooltip" pointerEvents="none"><line x1={hoverPoint.x} x2={hoverPoint.x} y1="0" y2={height} className="chart-crosshair" /><circle cx={hoverPoint.x} cy={hoverPoint.y} r="5" className="chart-hover-dot" style={{ fill: color }} /><rect x={Math.min(Math.max(hoverPoint.x - 80, 4), width - 164)} y="8" width="160" height="45" rx="4" /><text x={Math.min(Math.max(hoverPoint.x - 70, 14), width - 154)} y="27">{hoverLabel}</text><text x={Math.min(Math.max(hoverPoint.x - 70, 14), width - 154)} y="44">{hoverValue}{unit}</text></g>}
       </svg>
       <div className="chart-times">{axisTimes.map((time) => <span key={time.toISOString()}>{axisLabel(time)}</span>)}</div>
       <div className="chart-legend"><span><i className="legend-actual" />Actual</span><span><i className="legend-high" />High</span><span><i className="legend-low" />Low</span><span><i className="legend-average" />Average</span></div>
@@ -68,6 +79,7 @@ function App() {
   const [readings, setReadings] = useState([]);
   const [selectedRoom, setSelectedRoom] = useState('');
   const [range, setRange] = useState('24 hours');
+  const [customDays, setCustomDays] = useState(14);
   const [navOpen, setNavOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState('connecting');
 
@@ -94,15 +106,16 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const rangeQuery = range === '24 hours' ? '24h' : range === '7 days' ? '7d' : '30d';
-    fetch(`${apiBaseUrl}/readings?range=${rangeQuery}&limit=2000`).then((response) => {
+    const rangeQuery = range === '1 hour' ? '1h' : range === '24 hours' ? '24h' : range === '7 days' ? '7d' : range === '30 days' ? '30d' : 'custom';
+    const daysQuery = range === 'custom' ? `&days=${customDays}` : '';
+    fetch(`${apiBaseUrl}/readings?range=${rangeQuery}${daysQuery}&limit=5000`).then((response) => {
       if (!response.ok) throw new Error('Readings request failed');
       return response.json();
     }).then(setReadings).catch(() => {
       setReadings([]);
       setApiStatus('offline');
     });
-  }, [range]);
+  }, [range, customDays]);
 
   const activeRoom = useMemo(() => rooms.find((room) => room.name === selectedRoom) ?? rooms[0], [selectedRoom]);
   const visibleRooms = activeRoom ? [activeRoom] : rooms.slice(0, 1);
@@ -122,7 +135,8 @@ function App() {
       values.push(value);
       daily.set(day, values);
     });
-    return { actual, timestamps, high: points.map((reading) => range === '24 hours' ? Math.max(...actual) : Math.max(...daily.get(reading.recorded_at.slice(0, 10)))), low: points.map((reading) => range === '24 hours' ? Math.min(...actual) : Math.min(...daily.get(reading.recorded_at.slice(0, 10)))), average };
+    const useDailyLines = ['7 days', '30 days', 'custom'].includes(range);
+    return { actual, timestamps, high: points.map((reading) => useDailyLines ? Math.max(...daily.get(reading.recorded_at.slice(0, 10))) : Math.max(...actual)), low: points.map((reading) => useDailyLines ? Math.min(...daily.get(reading.recorded_at.slice(0, 10))) : Math.min(...actual)), average };
   };
   const temperatureSeries = buildSeries('temperature_c');
   const humiditySeries = buildSeries('humidity_percent');
