@@ -1,12 +1,12 @@
 #include <WiFiS3.h>
 #include <ArduinoHttpClient.h>
 #include <ArduinoJson.h>
-#include <DHT.h>
 #include "secrets.h"
 
-#define DHT_PIN 2
-#define DHT_TYPE DHT11
-DHT dht(DHT_PIN, DHT_TYPE);
+//#include <wire.h>
+#include "Adafruit_SHT31.h"
+
+Adafruit_SHT31 sht31 = Adafruit_SHT31();
 
 #ifndef API_USE_TLS
 #define API_USE_TLS 1
@@ -26,10 +26,11 @@ HttpClient client = HttpClient(wifi, API_HOST, API_PORT);
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("DHT11 sensor starting");
-  Serial.print("DHT data pin: D");
-  Serial.println(DHT_PIN);
-  dht.begin();
+  Serial.println("sht13 sensor starting");
+  if (! sht31.begin(0x44)) {   // Set to 0x45 if your ADDR pin is pulled high
+    Serial.println("Couldn't find SHT31 sensor!");
+    while (1) delay(1);
+  }
   delay(2000);
   Serial.print("API host: ");
   Serial.print(API_HOST);
@@ -62,11 +63,11 @@ void setup() {
 }
 
 void loop() {
-  Serial.println("Reading DHT11...");
-  float temperature = dht.readTemperature();
-  float humidity = dht.readHumidity();
+  Serial.println("Reading SHT31...");
+  float temperature = sht31.readTemperature();
+  float humidity = sht31.readHumidity();
   if (isnan(temperature) || isnan(humidity)) {
-    Serial.println("DHT11 read failed: NaN");
+    Serial.println("SHT31 read failed: NaN");
     Serial.println("Check VCC, GND, DATA pin D2, pull-up resistor, and DHT type");
     delay(3000);
     return;
