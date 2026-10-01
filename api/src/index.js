@@ -28,12 +28,19 @@ export default {
       const customDays = Math.min(Math.max(Number(url.searchParams.get('days') || 1), 1), 365);
       const hours = range === '1h' ? 1 : range === '24h' ? 24 : range === '7d' ? 24 * 7 : range === '30d' ? 24 * 30 : customDays * 24;
       const from = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-      const limit = Math.min(Number(url.searchParams.get('limit') || 50000), 50000);
-      const params = new URLSearchParams({ select: '*,sensors(room_id)', recorded_at: `gte.${from}`, order: 'recorded_at.asc', limit: String(limit) });
-      const response = await supabase(env, `temperature_readings?${params.toString()}`);
-      if (!response.ok) return new Response(response.body, { status: response.status, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
-      const readings = await response.json();
-      return json(readings.map((reading) => ({ ...reading, room_id: reading.sensors?.room_id })), response.status);
+      const requestedLimit = Math.min(Number(url.searchParams.get('limit') || 50000), 50000);
+      const pageSize = 1000;
+      const readings = [];
+      for (let offset = 0; offset < requestedLimit; offset += pageSize) {
+        const pageLimit = Math.min(pageSize, requestedLimit - offset);
+        const params = new URLSearchParams({ select: '*,sensors(room_id)', recorded_at: `gte.${from}`, order: 'recorded_at.asc', limit: String(pageLimit), offset: String(offset) });
+        const response = await supabase(env, `temperature_readings?${params.toString()}`);
+        if (!response.ok) return new Response(response.body, { status: response.status, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' } });
+        const page = await response.json();
+        readings.push(...page);
+        if (page.length < pageLimit) break;
+      }
+      return json(readings.map((reading) => ({ ...reading, room_id: reading.sensors?.room_id })), 200);
     }
 
     if (url.pathname === '/readings' && request.method === 'POST') {
