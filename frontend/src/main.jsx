@@ -62,6 +62,9 @@ function MetricChart({ actual, timestamps, high, low, average, formatValue, colo
         <polyline points={pointsFor(high)} className="chart-high" />
         <polyline points={pointsFor(low)} className="chart-low" />
         <line x1="0" x2={width} y1={height - ((formatValue(average) - min) / (max - min)) * height} y2={height - ((formatValue(average) - min) / (max - min)) * height} className="chart-average" />
+        <text x={width - 4} y={height - ((formatValue(high.at(-1)) - min) / (max - min)) * height - 6} textAnchor="end" className="chart-line-label high-label">Max</text>
+        <text x={width - 4} y={height - ((formatValue(low.at(-1)) - min) / (max - min)) * height + 14} textAnchor="end" className="chart-line-label low-label">Min</text>
+        <text x={width - 4} y={height - ((formatValue(average) - min) / (max - min)) * height - 6} textAnchor="end" className="chart-line-label average-label">Avg</text>
         <polyline points={actualPoints} className="chart-line" style={{ stroke: color }} />
         {actual.map((value, index) => {
           const point = pointFor(value, index);
