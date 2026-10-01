@@ -51,7 +51,7 @@ function MetricChart({ actual, timestamps, high, low, average, formatValue, colo
       <div className="chart-labels" aria-hidden="true">
         <span>{max.toFixed(0)}</span><span>{(max - (max - min) / 4).toFixed(0)}</span><span>{(max - (max - min) / 2).toFixed(0)}</span><span>{(max - (max - min) * 0.75).toFixed(0)}</span><span>{min.toFixed(0)}</span>
       </div>
-      <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel} onPointerMove={(event) => {
+      <svg className="chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={ariaLabel} onPointerMove={(event) => {
         const bounds = event.currentTarget.getBoundingClientRect();
         const x = ((event.clientX - bounds.left) / bounds.width) * width;
         const nearest = numericTimes.reduce((best, time, index) => Math.abs(pointFor(actual[index], index).x - x) < Math.abs(pointFor(actual[best], best).x - x) ? index : best, 0);
