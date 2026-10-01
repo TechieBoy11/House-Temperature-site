@@ -68,7 +68,7 @@ function MetricChart({ actual, timestamps, high, low, average, formatValue, colo
           return index % Math.max(1, Math.floor(actual.length / 100)) === 0 ? <circle key={index} cx={point.x} cy={point.y} r="2.5" className={formatValue(value) >= formatValue(average) ? 'chart-dot-above' : 'chart-dot-below'} /> : null;
         })}
         <circle cx={lastActual.x} cy={lastActual.y} r="6" className="chart-dot" style={{ fill: color }} />
-        {hoverPoint && <g className="chart-tooltip" pointerEvents="none"><line x1={hoverPoint.x} x2={hoverPoint.x} y1="0" y2={height} className="chart-crosshair" /><circle cx={hoverPoint.x} cy={hoverPoint.y} r="5" className="chart-hover-dot" style={{ fill: color }} /><rect x={Math.min(Math.max(hoverPoint.x - 80, 4), width - 164)} y="8" width="160" height="45" rx="4" /><text x={Math.min(Math.max(hoverPoint.x - 70, 14), width - 154)} y="27">{hoverLabel}</text><text x={Math.min(Math.max(hoverPoint.x - 70, 14), width - 154)} y="44">{hoverValue}{unit}</text></g>}
+        {hoverPoint && <g className="chart-tooltip" pointerEvents="none"><line x1={hoverPoint.x} x2={hoverPoint.x} y1="0" y2={height} className="chart-crosshair" /><circle cx={hoverPoint.x} cy={hoverPoint.y} r="5" className="chart-hover-dot" style={{ fill: color }} /><text x={Math.min(Math.max(hoverPoint.x - 70, 14), width - 154)} y="27">{hoverLabel}</text><text x={Math.min(Math.max(hoverPoint.x - 70, 14), width - 154)} y="44">{hoverValue}{unit}</text></g>}
       </svg>
       <div className="chart-times">{axisTimes.map((time) => <span key={time.toISOString()}>{axisLabel(time)}</span>)}</div>
       <div className="chart-legend"><span><i className="legend-actual" />Actual</span><span><i className="legend-high" />High</span><span><i className="legend-low" />Low</span><span><i className="legend-average" />Average</span></div>
@@ -128,9 +128,10 @@ function App() {
     const rawValues = rawPoints.map((reading) => reading[field]);
     if (!rawValues.length) return { actual: [], timestamps: [], high: [], low: [], average: null };
     const average = rawValues.reduce((sum, value) => sum + value, 0) / rawValues.length;
+    const aggregation = range === '24 hours' ? 'hour' : ['7 days', '30 days', 'custom'].includes(range) ? 'day' : 'range';
     const bucketKey = (timestamp) => {
       const time = new Date(timestamp).getTime();
-      return range === '24 hours' ? new Date(Math.floor(time / 3600000) * 3600000).toISOString() : new Date(time).toISOString().slice(0, 10);
+      return aggregation === 'hour' ? new Date(Math.floor(time / 3600000) * 3600000).toISOString() : new Date(time).toISOString().slice(0, 10);
     };
     const buckets = new Map();
     rawPoints.forEach((reading) => {
@@ -150,7 +151,7 @@ function App() {
     }, new Map())].map(([hour, values]) => ({ timestamp: new Date(hour).toISOString(), value: values.reduce((sum, value) => sum + value, 0) / values.length })) : rawPoints.map((reading) => ({ timestamp: reading.recorded_at, value: reading[field] }));
     const actual = points.map((point) => point.value);
     const timestamps = points.map((point) => point.timestamp);
-    const useBucketLines = ['24 hours', '7 days', '30 days', 'custom'].includes(range);
+    const useBucketLines = aggregation !== 'range';
     return { actual, timestamps, high: points.map((point) => useBucketLines ? Math.max(...buckets.get(bucketKey(point.timestamp))) : Math.max(...rawValues)), low: points.map((point) => useBucketLines ? Math.min(...buckets.get(bucketKey(point.timestamp))) : Math.min(...rawValues)), average };
   };
   const temperatureSeries = buildSeries('temperature_c');
