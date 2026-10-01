@@ -97,5 +97,5 @@ void loop() {
     Serial.println(responseStatus);
     client.stop();
   }
-  delay(3000);
+  delay(60000);
 }
